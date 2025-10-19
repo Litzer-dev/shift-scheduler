@@ -110,12 +110,6 @@ export function generateHourlyRotation(
     // Get the current rotation offset for this group
     const rotationOffset = rotationState[memberKey];
     
-    // Get previous hour's assignments to avoid consecutive same positions
-    const previousRotation = rotations.length > 0 ? rotations[rotations.length - 1] : null;
-    const previousOutsideIds = new Set(previousRotation?.outside.map(p => p.teamMemberId) || []);
-    const previousInsideIds = new Set(previousRotation?.inside.map(p => p.teamMemberId) || []);
-    const previousFloaterIds = new Set(previousRotation?.floater.map(p => p.teamMemberId) || []);
-    
     // Calculate the number of positions to shift to ensure no one repeats
     // We need to shift by at least the size of the largest position group
     const maxPositionSize = Math.max(hourConfig.outsideCount, hourConfig.insideCount, hourConfig.floaterCount);

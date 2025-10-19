@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { TeamMember, HourlyRotation, WeeklySchedule } from '@/types';
-import { generateHourlyRotation, getDailySchedule, getDayOfWeek, formatTime } from '@/utils/shiftRotation';
+import { generateHourlyRotation, formatTime } from '@/utils/shiftRotation';
 import { createDefaultWeeklySchedule, getDayName } from '@/utils/scheduleHelpers';
 
 export default function Home() {
@@ -64,7 +64,7 @@ export default function Home() {
     setTeamMembers(teamMembers.filter(m => m.id !== id));
   };
 
-  const updateMemberSchedule = (memberId: string, dayKey: keyof WeeklySchedule, field: string, value: any) => {
+  const updateMemberSchedule = (memberId: string, dayKey: keyof WeeklySchedule, field: string, value: string | boolean) => {
     setTeamMembers(teamMembers.map(m => {
       if (m.id === memberId) {
         return {
@@ -258,7 +258,7 @@ export default function Home() {
           <div className="text-sm text-gray-600 bg-yellow-50 p-4 rounded-lg">
             <p className="font-medium mb-2">How It Works:</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Set each team member's schedule for every day of the week</li>
+              <li>Set each team member&apos;s schedule for every day of the week</li>
               <li>Mark days off and presence for each day</li>
               <li>Generate rotation for entire week at once</li>
               <li>Fair rotation ensures no one stays in same position consecutively</li>
