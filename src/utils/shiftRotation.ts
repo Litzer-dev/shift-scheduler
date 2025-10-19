@@ -1,4 +1,20 @@
-import { TeamMember, HourlyRotation, RotationConfig } from '@/types';
+import { TeamMember, HourlyRotation, RotationConfig, DailySchedule } from '@/types';
+
+// Helper to get day of week key from date string
+function getDayOfWeek(dateString: string): keyof TeamMember['weeklySchedule'] {
+  const date = new Date(dateString);
+  const days: (keyof TeamMember['weeklySchedule'])[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  return days[date.getDay()];
+}
+
+// Helper to get daily schedule for a specific date
+function getDailySchedule(member: TeamMember, date: string): DailySchedule {
+  const dayKey = getDayOfWeek(date);
+  return member.weeklySchedule[dayKey];
+}
+
+// Export helper for UI to use
+export { getDailySchedule, getDayOfWeek };
 
 export function getRotationConfig(presentMembers: TeamMember[]): RotationConfig {
   const presentCount = presentMembers.length;
@@ -27,14 +43,16 @@ function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
-// Check if a team member is working at a specific hour
-function isMemberWorking(member: TeamMember, hour: number): boolean {
-  if (!member.isPresent) return false;
+// Check if a team member is working at a specific hour on a specific date
+function isMemberWorking(member: TeamMember, hour: number, date: string): boolean {
+  const dailySchedule = getDailySchedule(member, date);
+  
+  if (!dailySchedule.isPresent || dailySchedule.isOff) return false;
   
   const hourStart = hour * 60; // Convert hour to minutes
   const hourEnd = (hour + 1) * 60;
-  const shiftStart = timeToMinutes(member.shiftStart);
-  const shiftEnd = timeToMinutes(member.shiftEnd);
+  const shiftStart = timeToMinutes(dailySchedule.shiftStart);
+  const shiftEnd = timeToMinutes(dailySchedule.shiftEnd);
   
   // Check if the hour falls within the member's shift
   // Member must have already started (hourStart >= shiftStart)
@@ -49,8 +67,11 @@ export function generateHourlyRotation(
   const rotations: HourlyRotation[] = [];
   const hours = Array.from({ length: 16 }, (_, i) => i + 7); // 7am to 10pm (16 hours)
   
-  // Get present members only
-  const presentMembers = teamMembers.filter(m => m.isPresent);
+  // Get present members for this specific date
+  const presentMembers = teamMembers.filter(m => {
+    const dailySchedule = getDailySchedule(m, date);
+    return dailySchedule.isPresent && !dailySchedule.isOff;
+  });
   
   // Track rotation index for each unique group of available members
   const rotationState: { [key: string]: number } = {};
@@ -59,8 +80,8 @@ export function generateHourlyRotation(
     const startTime = `${hour.toString().padStart(2, '0')}:00`;
     const endTime = `${(hour + 1).toString().padStart(2, '0')}:00`;
     
-    // Find members available for THIS SPECIFIC HOUR
-    const availableMembers = presentMembers.filter(m => isMemberWorking(m, hour));
+    // Find members available for THIS SPECIFIC HOUR on this date
+    const availableMembers = presentMembers.filter(m => isMemberWorking(m, hour, date));
     
     // Calculate config based on who's actually available THIS HOUR
     const hourConfig = getRotationConfig(availableMembers);

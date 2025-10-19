@@ -1,9 +1,24 @@
-export interface TeamMember {
-  id: string;
-  name: string;
+export interface DailySchedule {
   shiftStart: string; // e.g., "07:00"
   shiftEnd: string;   // e.g., "15:00"
   isPresent: boolean;
+  isOff?: boolean;    // Day off
+}
+
+export interface WeeklySchedule {
+  monday: DailySchedule;
+  tuesday: DailySchedule;
+  wednesday: DailySchedule;
+  thursday: DailySchedule;
+  friday: DailySchedule;
+  saturday: DailySchedule;
+  sunday: DailySchedule;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  weeklySchedule: WeeklySchedule;
   createdAt: Date;
 }
 
