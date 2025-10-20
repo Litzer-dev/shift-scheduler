@@ -4,6 +4,15 @@ import { useState, useEffect } from 'react';
 import { TeamMember, HourlyRotation, WeeklySchedule } from '@/types';
 import { generateHourlyRotation, formatTime } from '@/utils/shiftRotation';
 import { createDefaultWeeklySchedule, getDayName } from '@/utils/scheduleHelpers';
+import { exportToPDF, exportToExcel, exportDayToPDF } from '@/utils/exportUtils';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import {
+  fetchTeamMembers,
+  addTeamMember as addTeamMemberToSupabase,
+  updateTeamMember as updateTeamMemberInSupabase,
+  deleteTeamMember as deleteTeamMemberFromSupabase,
+  subscribeToTeamMembers,
+} from '@/utils/supabaseOperations';
 
 export default function Home() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -12,17 +21,42 @@ export default function Home() {
   const [weekRotations, setWeekRotations] = useState<{ [date: string]: HourlyRotation[] }>({});
   const [editingMember, setEditingMember] = useState<string | null>(null);
 
-  // Load team members from localStorage
+  // Load team members from Supabase or localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('teamMembers');
-    if (stored) {
-      setTeamMembers(JSON.parse(stored));
+    const loadTeamMembers = async () => {
+      if (isSupabaseConfigured()) {
+        // Load from Supabase
+        const members = await fetchTeamMembers();
+        setTeamMembers(members);
+      } else {
+        // Fallback to localStorage
+        const stored = localStorage.getItem('teamMembers');
+        if (stored) {
+          setTeamMembers(JSON.parse(stored));
+        }
+      }
+    };
+
+    loadTeamMembers();
+
+    // Subscribe to real-time updates if Supabase is configured
+    if (isSupabaseConfigured()) {
+      const channel = subscribeToTeamMembers((members) => {
+        setTeamMembers(members);
+      });
+
+      // Cleanup subscription on unmount
+      return () => {
+        if (channel) {
+          channel.unsubscribe();
+        }
+      };
     }
   }, []);
 
-  // Save team members to localStorage
+  // Save team members to localStorage (only if Supabase is not configured)
   useEffect(() => {
-    if (teamMembers.length > 0) {
+    if (!isSupabaseConfigured() && teamMembers.length > 0) {
       localStorage.setItem('teamMembers', JSON.stringify(teamMembers));
     }
   }, [teamMembers]);
@@ -47,25 +81,48 @@ export default function Home() {
     return dates;
   }
 
-  const addTeamMember = () => {
+  const addTeamMember = async () => {
     if (newMemberName.trim()) {
-      const newMember: TeamMember = {
-        id: Date.now().toString(),
+      const memberData = {
         name: newMemberName.trim(),
         weeklySchedule: createDefaultWeeklySchedule(),
-        createdAt: new Date(),
       };
-      setTeamMembers([...teamMembers, newMember]);
+
+      if (isSupabaseConfigured()) {
+        // Add to Supabase
+        const newMember = await addTeamMemberToSupabase(memberData);
+        if (newMember) {
+          setTeamMembers([...teamMembers, newMember]);
+        }
+      } else {
+        // Add to localStorage
+        const newMember: TeamMember = {
+          id: Date.now().toString(),
+          ...memberData,
+          createdAt: new Date(),
+        };
+        setTeamMembers([...teamMembers, newMember]);
+      }
+      
       setNewMemberName('');
     }
   };
 
-  const removeMember = (id: string) => {
-    setTeamMembers(teamMembers.filter(m => m.id !== id));
+  const removeMember = async (id: string) => {
+    if (isSupabaseConfigured()) {
+      // Delete from Supabase
+      const success = await deleteTeamMemberFromSupabase(id);
+      if (success) {
+        setTeamMembers(teamMembers.filter(m => m.id !== id));
+      }
+    } else {
+      // Delete from localStorage
+      setTeamMembers(teamMembers.filter(m => m.id !== id));
+    }
   };
 
-  const updateMemberSchedule = (memberId: string, dayKey: keyof WeeklySchedule, field: string, value: string | boolean) => {
-    setTeamMembers(teamMembers.map(m => {
+  const updateMemberSchedule = async (memberId: string, dayKey: keyof WeeklySchedule, field: string, value: string | boolean) => {
+    const updatedMembers = teamMembers.map(m => {
       if (m.id === memberId) {
         return {
           ...m,
@@ -79,10 +136,20 @@ export default function Home() {
         };
       }
       return m;
-    }));
+    });
+
+    setTeamMembers(updatedMembers);
+
+    // Sync to Supabase if configured
+    if (isSupabaseConfigured()) {
+      const updatedMember = updatedMembers.find(m => m.id === memberId);
+      if (updatedMember) {
+        await updateTeamMemberInSupabase(updatedMember);
+      }
+    }
   };
 
-  const copyScheduleToWeek = (memberId: string, sourceDayKey: keyof WeeklySchedule) => {
+  const copyScheduleToWeek = async (memberId: string, sourceDayKey: keyof WeeklySchedule) => {
     const member = teamMembers.find(m => m.id === memberId);
     if (!member) return;
 
@@ -93,9 +160,19 @@ export default function Home() {
       newWeeklySchedule[day] = { ...sourceSchedule };
     });
 
-    setTeamMembers(teamMembers.map(m =>
+    const updatedMembers = teamMembers.map(m =>
       m.id === memberId ? { ...m, weeklySchedule: newWeeklySchedule } : m
-    ));
+    );
+
+    setTeamMembers(updatedMembers);
+
+    // Sync to Supabase if configured
+    if (isSupabaseConfigured()) {
+      const updatedMember = updatedMembers.find(m => m.id === memberId);
+      if (updatedMember) {
+        await updateTeamMemberInSupabase(updatedMember);
+      }
+    }
   };
 
   const generateWeekRotation = () => {
@@ -115,9 +192,17 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
-          Weekly Shift Scheduler
-        </h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-4xl font-bold text-gray-800">
+            Weekly Shift Scheduler
+          </h1>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white shadow">
+            <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+            <span className="text-sm font-medium text-gray-700">
+              {isSupabaseConfigured() ? 'Cloud Sync Active' : 'Local Storage Only'}
+            </span>
+          </div>
+        </div>
 
         {/* Team Member Management */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
@@ -255,6 +340,30 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Export Buttons */}
+          {Object.keys(weekRotations).length > 0 && (
+            <div className="flex gap-3 mb-4">
+              <button
+                onClick={() => exportToPDF(weekRotations, weekDates)}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export to PDF
+              </button>
+              <button
+                onClick={() => exportToExcel(weekRotations, weekDates)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition-colors font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export to Excel
+              </button>
+            </div>
+          )}
+
           <div className="text-sm text-gray-600 bg-yellow-50 p-4 rounded-lg">
             <p className="font-medium mb-2">How It Works:</p>
             <ul className="list-disc list-inside space-y-1">
@@ -276,9 +385,21 @@ export default function Home() {
 
               return (
                 <div key={date} className="bg-white rounded-lg shadow-lg p-6">
-                  <h3 className="text-xl font-semibold text-gray-700 mb-4">
-                    {getDayName(dayKey)} - {new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-semibold text-gray-700">
+                      {getDayName(dayKey)} - {new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h3>
+                    <button
+                      onClick={() => exportDayToPDF(date, getDayName(dayKey), rotations)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                      title="Export this day to PDF"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      PDF
+                    </button>
+                  </div>
 
                   {rotations.length > 0 ? (
                     <div className="overflow-x-auto">
