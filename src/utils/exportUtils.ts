@@ -34,24 +34,22 @@ export function exportToPDF(
       year: 'numeric'
     });
     
-    // Add decorative header background
-    doc.setFillColor(20, 184, 166); // Teal-500
-    doc.rect(0, 0, 210, 35, 'F');
+    // Add header with dark border (prints well in B&W)
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(1);
+    doc.rect(10, 8, 190, 25);
     
     // Title
-    doc.setFontSize(22);
+    doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('Shift Rotation Schedule', 14, 15);
+    doc.setTextColor(0, 0, 0);
+    doc.text('SHIFT ROTATION SCHEDULE', 14, 18);
     
     // Date
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(240, 253, 250); // Teal-50
-    doc.text(dateStr, 14, 25);
-    
-    // Reset text color for table
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
+    doc.text(dateStr, 14, 28);
     
     // Check if any rotation has floaters
     const hasFloater = rotations.some(r => r.floater.length > 0);
@@ -83,39 +81,43 @@ export function exportToPDF(
       ? ['Time', 'Outside', 'Inside', 'Floater']
       : ['Time', 'Outside', 'Inside'];
     
-    // Add table with enhanced styling
+    // Add table optimized for B&W printing
     autoTable(doc, {
-      startY: 42,
+      startY: 40,
       head: [headers],
       body: tableData,
-      theme: 'striped',
+      theme: 'grid',
       styles: { 
         fontSize: 10, 
         cellPadding: 4,
-        lineColor: [209, 213, 219], // Gray-300
-        lineWidth: 0.5,
+        lineColor: [0, 0, 0], // Black borders
+        lineWidth: 0.75,
+        textColor: [0, 0, 0], // Black text
+        fontStyle: 'normal',
       },
       headStyles: { 
-        fillColor: [20, 184, 166], // Teal-500
-        textColor: [255, 255, 255],
+        fillColor: [220, 220, 220], // Light gray background (prints as light gray)
+        textColor: [0, 0, 0], // Black text
         fontStyle: 'bold',
         fontSize: 11,
         halign: 'left',
+        lineWidth: 1,
       },
       alternateRowStyles: {
-        fillColor: [240, 253, 250], // Teal-50
+        fillColor: [255, 255, 255], // White background
       },
       columnStyles: {
-        0: { cellWidth: 30, fontStyle: 'bold', textColor: [51, 65, 85] }, // Time column - Slate-700
-        1: { halign: 'left', textColor: [194, 65, 12] }, // Outside - Orange-700
-        2: { halign: 'left', textColor: [29, 78, 216] }, // Inside - Blue-700
-        3: { halign: 'left', textColor: [126, 34, 206] }, // Floater - Purple-700
+        0: { cellWidth: 30, fontStyle: 'bold', textColor: [0, 0, 0] }, // Time column - Bold black
+        1: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Outside - Bold black
+        2: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Inside - Bold black
+        3: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Floater - Bold black
       },
       margin: { left: 14, right: 14 },
       didDrawPage: function(data) {
         // Add footer with page number
         doc.setFontSize(8);
-        doc.setTextColor(107, 114, 128); // Gray-500
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'bold');
         doc.text(
           `Page ${dayIndex + 1} of ${weekDates.length}`,
           doc.internal.pageSize.width / 2,
@@ -213,30 +215,28 @@ export function exportDayToPDF(
 ) {
   const doc = new jsPDF();
   
-  // Add decorative header background
-  doc.setFillColor(20, 184, 166); // Teal-500
-  doc.rect(0, 0, 210, 35, 'F');
+  // Add header with dark border (prints well in B&W)
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(1);
+  doc.rect(10, 8, 190, 25);
   
   // Add title
-  doc.setFontSize(22);
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.text('Daily Shift Rotation', 14, 15);
+  doc.setTextColor(0, 0, 0);
+  doc.text('DAILY SHIFT ROTATION', 14, 18);
   
   // Add date
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(240, 253, 250); // Teal-50
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
   const dateStr = new Date(date).toLocaleDateString('en-US', { 
     weekday: 'long',
     month: 'long', 
     day: 'numeric', 
     year: 'numeric' 
   });
-  doc.text(dateStr, 14, 25);
-  
-  // Reset text color for table
-  doc.setTextColor(0, 0, 0);
+  doc.text(dateStr, 14, 28);
   
   // Check if any rotation has floaters
   const hasFloater = rotations.some(r => r.floater.length > 0);
@@ -268,38 +268,42 @@ export function exportDayToPDF(
     ? ['Time', 'Outside', 'Inside', 'Floater']
     : ['Time', 'Outside', 'Inside'];
   
-  // Add table with enhanced styling
+  // Add table optimized for B&W printing
   autoTable(doc, {
-    startY: 42,
+    startY: 40,
     head: [headers],
     body: tableData,
-    theme: 'striped',
+    theme: 'grid',
     styles: { 
       fontSize: 10, 
       cellPadding: 4,
-      lineColor: [209, 213, 219], // Gray-300
-      lineWidth: 0.5,
+      lineColor: [0, 0, 0], // Black borders
+      lineWidth: 0.75,
+      textColor: [0, 0, 0], // Black text
+      fontStyle: 'normal',
     },
     headStyles: { 
-      fillColor: [20, 184, 166], // Teal-500
-      textColor: [255, 255, 255],
+      fillColor: [220, 220, 220], // Light gray background (prints as light gray)
+      textColor: [0, 0, 0], // Black text
       fontStyle: 'bold',
       fontSize: 11,
       halign: 'left',
+      lineWidth: 1,
     },
     alternateRowStyles: {
-      fillColor: [240, 253, 250], // Teal-50
+      fillColor: [255, 255, 255], // White background
     },
     columnStyles: {
-      0: { cellWidth: 30, fontStyle: 'bold', textColor: [51, 65, 85] }, // Time column - Slate-700
-      1: { halign: 'left', textColor: [194, 65, 12] }, // Outside - Orange-700
-      2: { halign: 'left', textColor: [29, 78, 216] }, // Inside - Blue-700
-      3: { halign: 'left', textColor: [126, 34, 206] }, // Floater - Purple-700
+      0: { cellWidth: 30, fontStyle: 'bold', textColor: [0, 0, 0] }, // Time column - Bold black
+      1: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Outside - Bold black
+      2: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Inside - Bold black
+      3: { halign: 'left', fontStyle: 'bold', textColor: [0, 0, 0] }, // Floater - Bold black
     },
     didDrawPage: function(data) {
       // Add footer
       doc.setFontSize(8);
-      doc.setTextColor(107, 114, 128); // Gray-500
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
       doc.text(
         `Generated on ${new Date().toLocaleDateString('en-US')}`,
         doc.internal.pageSize.width / 2,
