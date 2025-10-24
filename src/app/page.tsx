@@ -20,6 +20,7 @@ export default function Home() {
   const [selectedWeekStart, setSelectedWeekStart] = useState(getMonday(new Date()).toISOString().split('T')[0]);
   const [weekRotations, setWeekRotations] = useState<{ [date: string]: HourlyRotation[] }>({});
   const [editingMember, setEditingMember] = useState<string | null>(null);
+  const [rotationWeekKey, setRotationWeekKey] = useState<string>('');
 
   // Load team members from Supabase or localStorage
   useEffect(() => {
@@ -80,6 +81,26 @@ export default function Home() {
     }
   }, [teamMembers]);
 
+  // Load saved rotation from localStorage on mount
+  useEffect(() => {
+    const savedRotations = localStorage.getItem('weekRotations');
+    const savedWeekKey = localStorage.getItem('rotationWeekKey');
+    
+    if (savedRotations && savedWeekKey) {
+      setWeekRotations(JSON.parse(savedRotations));
+      setRotationWeekKey(savedWeekKey);
+      setSelectedWeekStart(savedWeekKey);
+    }
+  }, []);
+
+  // Save rotation to localStorage whenever it changes
+  useEffect(() => {
+    if (Object.keys(weekRotations).length > 0 && rotationWeekKey) {
+      localStorage.setItem('weekRotations', JSON.stringify(weekRotations));
+      localStorage.setItem('rotationWeekKey', rotationWeekKey);
+    }
+  }, [weekRotations, rotationWeekKey]);
+
   // Get Monday of current week
   function getMonday(date: Date): Date {
     const d = new Date(date);
@@ -91,11 +112,16 @@ export default function Home() {
   // Get array of dates for the week
   function getWeekDates(mondayDate: string): string[] {
     const dates: string[] = [];
-    const monday = new Date(mondayDate);
+    // Parse date as local time to avoid timezone shifts
+    const [year, month, day] = mondayDate.split('-').map(Number);
+    const monday = new Date(year, month - 1, day);
+    
     for (let i = 0; i < 7; i++) {
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + i);
-      dates.push(date.toISOString().split('T')[0]);
+      const date = new Date(year, month - 1, day + i);
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      dates.push(`${yyyy}-${mm}-${dd}`);
     }
     return dates;
   }
@@ -203,6 +229,14 @@ export default function Home() {
     });
 
     setWeekRotations(rotations);
+    setRotationWeekKey(selectedWeekStart);
+  };
+
+  const clearRotation = () => {
+    setWeekRotations({});
+    setRotationWeekKey('');
+    localStorage.removeItem('weekRotations');
+    localStorage.removeItem('rotationWeekKey');
   };
 
   const weekDates = getWeekDates(selectedWeekStart);
@@ -236,7 +270,7 @@ export default function Home() {
               onChange={(e) => setNewMemberName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addTeamMember()}
               placeholder="Enter team member name"
-              className="flex-1 px-4 py-2 border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+              className="flex-1 px-4 py-2 border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400"
             />
             <button
               onClick={addTeamMember}
@@ -339,14 +373,14 @@ export default function Home() {
                             type="time"
                             value={schedule.shiftStart}
                             onChange={(e) => updateMemberSchedule(editingMember, dayKey, 'shiftStart', e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-teal-200 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            className="w-full px-2 py-1.5 text-xs border border-teal-200 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent text-slate-900"
                             placeholder="Start"
                           />
                           <input
                             type="time"
                             value={schedule.shiftEnd}
                             onChange={(e) => updateMemberSchedule(editingMember, dayKey, 'shiftEnd', e.target.value)}
-                            className="w-full px-2 py-1.5 text-xs border border-teal-200 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            className="w-full px-2 py-1.5 text-xs border border-teal-200 rounded focus:ring-2 focus:ring-teal-500 focus:border-transparent text-slate-900"
                             placeholder="End"
                           />
                         </div>
@@ -373,6 +407,27 @@ export default function Home() {
             <span className="text-teal-600">📅</span> Generate Week Rotation
           </h2>
           
+          {Object.keys(weekRotations).length > 0 && rotationWeekKey && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-600">✓</span>
+                <span className="text-sm font-medium text-emerald-800">
+                  Rotation generated for week of {(() => {
+                    const [year, month, day] = rotationWeekKey.split('-').map(Number);
+                    const localDate = new Date(year, month - 1, day);
+                    return localDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  })()}
+                </span>
+              </div>
+              <button
+                onClick={clearRotation}
+                className="px-3 py-1 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
+              >
+                Clear & Regenerate
+              </button>
+            </div>
+          )}
+          
           <div className="flex gap-4 items-end mb-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -382,15 +437,16 @@ export default function Home() {
                 type="date"
                 value={selectedWeekStart}
                 onChange={(e) => setSelectedWeekStart(e.target.value)}
-                className="w-full px-4 py-2 border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                className="w-full px-4 py-2 border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white text-slate-900"
+                disabled={Object.keys(weekRotations).length > 0}
               />
             </div>
             <button
               onClick={generateWeekRotation}
-              disabled={teamMembers.length === 0}
+              disabled={teamMembers.length === 0 || Object.keys(weekRotations).length > 0}
               className="px-6 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all font-medium disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
             >
-              Generate Week Rotation
+              {Object.keys(weekRotations).length > 0 ? 'Rotation Generated' : 'Generate Week Rotation'}
             </button>
           </div>
 
@@ -426,6 +482,7 @@ export default function Home() {
               <li>Generate rotation for entire week at once</li>
               <li>Fair rotation ensures no one stays in same position consecutively</li>
               <li>Daily pairings vary to prevent same partners day after day</li>
+              <li><strong>Rotation persists on page refresh</strong> - prevents accidental regeneration</li>
             </ul>
           </div>
         </div>
@@ -442,7 +499,11 @@ export default function Home() {
                 <div key={date} className="bg-white/80 backdrop-blur-sm rounded-xl shadow-xl p-6 border border-teal-100">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xl font-semibold text-slate-800">
-                      {getDayName(dayKey)} - {new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      {getDayName(dayKey)} - {(() => {
+                        const [year, month, day] = date.split('-').map(Number);
+                        const localDate = new Date(year, month - 1, day);
+                        return localDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                      })()}
                     </h3>
                     <button
                       onClick={() => exportDayToPDF(date, getDayName(dayKey), rotations)}
