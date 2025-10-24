@@ -13,6 +13,12 @@ import {
   deleteTeamMember as deleteTeamMemberFromSupabase,
   subscribeToTeamMembers,
 } from '@/utils/supabaseOperations';
+import {
+  fetchRotation,
+  saveRotation,
+  deleteRotation,
+  subscribeToRotations,
+} from '@/utils/rotationOperations';
 
 export default function Home() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -81,21 +87,60 @@ export default function Home() {
     }
   }, [teamMembers]);
 
-  // Load saved rotation from localStorage on mount
+  // Load saved rotation from Supabase or localStorage on mount
   useEffect(() => {
-    const savedRotations = localStorage.getItem('weekRotations');
-    const savedWeekKey = localStorage.getItem('rotationWeekKey');
-    
-    if (savedRotations && savedWeekKey) {
-      setWeekRotations(JSON.parse(savedRotations));
-      setRotationWeekKey(savedWeekKey);
-      setSelectedWeekStart(savedWeekKey);
-    }
+    const loadRotation = async () => {
+      if (isSupabaseConfigured()) {
+        // Try to load from Supabase first
+        const rotation = await fetchRotation(selectedWeekStart);
+        if (rotation) {
+          setWeekRotations(rotation.rotation_data);
+          setRotationWeekKey(rotation.week_start_date);
+          console.log('✅ Loaded rotation from Supabase for week:', rotation.week_start_date);
+        }
+      } else {
+        // Fallback to localStorage
+        const savedRotations = localStorage.getItem('weekRotations');
+        const savedWeekKey = localStorage.getItem('rotationWeekKey');
+        
+        if (savedRotations && savedWeekKey) {
+          setWeekRotations(JSON.parse(savedRotations));
+          setRotationWeekKey(savedWeekKey);
+          setSelectedWeekStart(savedWeekKey);
+        }
+      }
+    };
+
+    loadRotation();
   }, []);
 
-  // Save rotation to localStorage whenever it changes
+  // Subscribe to rotation changes if Supabase is configured
   useEffect(() => {
-    if (Object.keys(weekRotations).length > 0 && rotationWeekKey) {
+    if (isSupabaseConfigured() && selectedWeekStart) {
+      const channel = subscribeToRotations(selectedWeekStart, (rotation) => {
+        if (rotation) {
+          setWeekRotations(rotation.rotation_data);
+          setRotationWeekKey(rotation.week_start_date);
+          console.log('📡 Rotation updated via realtime:', rotation.week_start_date);
+        } else {
+          // Rotation was deleted
+          setWeekRotations({});
+          setRotationWeekKey('');
+          console.log('📡 Rotation deleted via realtime');
+        }
+      });
+
+      return () => {
+        if (channel) {
+          channel.unsubscribe();
+        }
+      };
+    }
+  }, [selectedWeekStart]);
+
+  // Save rotation to localStorage as backup (only if Supabase is not configured)
+  useEffect(() => {
+    if (!isSupabaseConfigured() && Object.keys(weekRotations).length > 0 && rotationWeekKey) {
       localStorage.setItem('weekRotations', JSON.stringify(weekRotations));
       localStorage.setItem('rotationWeekKey', rotationWeekKey);
     }
@@ -220,7 +265,7 @@ export default function Home() {
     }
   };
 
-  const generateWeekRotation = () => {
+  const generateWeekRotation = async () => {
     const weekDates = getWeekDates(selectedWeekStart);
     const rotations: { [date: string]: HourlyRotation[] } = {};
 
@@ -230,9 +275,23 @@ export default function Home() {
 
     setWeekRotations(rotations);
     setRotationWeekKey(selectedWeekStart);
+
+    // Save to Supabase if configured
+    if (isSupabaseConfigured()) {
+      await saveRotation(selectedWeekStart, rotations);
+    } else {
+      // Fallback to localStorage
+      localStorage.setItem('weekRotations', JSON.stringify(rotations));
+      localStorage.setItem('rotationWeekKey', selectedWeekStart);
+    }
   };
 
-  const clearRotation = () => {
+  const clearRotation = async () => {
+    // Delete from Supabase if configured
+    if (isSupabaseConfigured() && rotationWeekKey) {
+      await deleteRotation(rotationWeekKey);
+    }
+    
     setWeekRotations({});
     setRotationWeekKey('');
     localStorage.removeItem('weekRotations');
@@ -482,6 +541,7 @@ export default function Home() {
               <li>Generate rotation for entire week at once</li>
               <li>Fair rotation ensures no one stays in same position consecutively</li>
               <li>Daily pairings vary to prevent same partners day after day</li>
+              <li><strong>Rotation syncs across all devices</strong> - everyone sees the same schedule</li>
               <li><strong>Rotation persists on page refresh</strong> - prevents accidental regeneration</li>
             </ul>
           </div>
